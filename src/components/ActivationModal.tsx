@@ -31,10 +31,30 @@ export default function ActivationModal() {
   useEffect(() => onActivationRequest(() => { setStage("choose"); setOpen(true); }), []);
 
   // بازگشت از درگاه واقعی با پارامتر ?pay=ok|fail
+  // نکته امنیتی: هرگز فقط به pay=ok اعتماد نکنید — این پارامتر را هرکسی می‌تواند
+  // دستی به URL اضافه کند و بدون پرداخت، نسخه‌ی Pro را فعال کند. درگاه واقعی باید
+  // همراه با pay=ok یک کد امضاشده (همان فرمت TYZ-<exp>-<sig>) در پارامتر code
+  // برگرداند تا از طریق redeemCode بررسی شود.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pay = params.get("pay");
-    if (pay === "ok") { activate(); setStage("success"); setOpen(true); }
+    const returnedCode = params.get("code");
+    if (pay === "ok") {
+      if (returnedCode) {
+        const res = redeemCode(returnedCode);
+        setStage(res.ok ? "success" : "failed");
+        setOpen(true);
+      } else if (import.meta.env.DEV) {
+        // فقط در محیط توسعه، برای تست بدون درگاه واقعی، فعال‌سازی مستقیم مجاز است.
+        activate();
+        setStage("success");
+        setOpen(true);
+      } else {
+        // در نسخه‌ی نهایی، بدون کد معتبر از درگاه، فعال‌سازی انجام نمی‌شود.
+        setStage("failed");
+        setOpen(true);
+      }
+    }
     if (pay === "fail") { setStage("failed"); setOpen(true); }
   }, []);
 
@@ -53,8 +73,16 @@ export default function ActivationModal() {
       setTimeout(() => { window.location.href = GATEWAY_URL; }, 1600);
       return;
     }
-    // شبیه‌سازی بازگشت موفق از درگاه (برای پیش‌نمایش)
-    setTimeout(() => { activate(); setStage("success"); }, 2200);
+    if (import.meta.env.DEV) {
+      // شبیه‌سازی بازگشت موفق از درگاه — فقط برای پیش‌نمایش در محیط توسعه.
+      setTimeout(() => { activate(); setStage("success"); }, 2200);
+      return;
+    }
+    // نکته امنیتی: در نسخه‌ی نهایی (production build) اگر GATEWAY_URL تنظیم نشده
+    // باشد، دیگر Pro به‌صورت رایگان فعال نمی‌شود — وگرنه هر کاربری بدون پرداخت
+    // به نسخه‌ی تخصصی دسترسی پیدا می‌کند. باید پیش از انتشار، GATEWAY_URL را
+    // با آدرس درگاه پرداخت واقعی پر کنید.
+    setTimeout(() => { setStage("failed"); }, 800);
   }
 
   return (

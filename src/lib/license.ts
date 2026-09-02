@@ -82,8 +82,13 @@ export function clearLicense(): void {
 /** اعتبارسنجی کد فعال‌سازی (کد را سرور صادر می‌کند؛ اینجا بررسی امضا انجام می‌شود) */
 export function redeemCode(code: string): { ok: boolean; msg: string } {
   const clean = code.trim().toUpperCase();
-  // کدهای نمونه‌ی نمایشی (برای تست)
-  const demoCodes = ["TYZ-PRO-1404", "تاسیسات یزد", "TASISAT YAZD"];
+  // کدهای نمونه‌ی نمایشی (فقط برای تست در محیط توسعه)
+  // نکته امنیتی: این کدها در محیط توسعه فعال‌اند تا بدون درگاه واقعی بتوانید تست
+  // کنید. در بیلد نهایی (production) به‌طور خودکار غیرفعال می‌شوند تا در سورس
+  // منتشرشده‌ی سایت قابل استفاده‌ی رایگان توسط کاربران نباشند.
+  const demoCodes = import.meta.env.DEV
+    ? ["TYZ-PRO-1404", "تاسیسات یزد", "TASISAT YAZD"]
+    : [];
   if (demoCodes.includes(clean)) {
     activate();
     return { ok: true, msg: "کد فعال‌سازی معتبر است؛ نسخه تخصصی برای همیشه فعال شد." };
@@ -101,11 +106,11 @@ export function redeemCode(code: string): { ok: boolean; msg: string } {
   return { ok: false, msg: "کد واردشده نامعتبر است. لطفاً کد صحیح را وارد کنید." };
 }
 
-/** ابزار داخلی برای ساخت کد لایسنس (معادل کار سرور) */
-export function generateCode(expYears = 10): string {
-  const exp = Date.now() + expYears * 365 * 24 * 3600 * 1000;
-  return `TYZ-${exp}-${sign(exp)}`;
-}
+// نکته: تابع تولید کد لایسنس (generateCode) عمداً اینجا نگه داشته نمی‌شود چون
+// هیچ کامپوننتی در برنامه به آن نیاز ندارد؛ نگه‌داشتنش در باندل مرورگر فقط
+// سطح حمله را بیشتر می‌کند. برای صدور دستی کد لایسنس، از اسکریپت مستقل
+// scripts/generate-license.mjs در ریشه‌ی پروژه استفاده کنید (روی سرور/کامپیوتر
+// خودتان اجرا می‌شود، هرگز به مرورگر ارسال نمی‌شود).
 
 function notify() {
   window.dispatchEvent(new Event(CHANGE_EVENT));
