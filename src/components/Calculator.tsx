@@ -393,8 +393,8 @@ export default function Calculator() {
                   </div>
                   <p className="mb-2.5 flex items-center gap-2 text-xs font-bold text-teal-700"><span className="h-1.5 w-1.5 rounded-full bg-teal-600" /> نتایج اصلی (رایگان)</p>
                   <div className="grid gap-2.5 sm:grid-cols-2">
-                    <ResultCard icon={<Boiler className="h-5 w-5" />} title="پکیج" value={fa(r.boiler.kw) + " kW"} desc="رایج بازار" tone="teal" />
-                    <ResultCard icon={<Cooler className="h-5 w-5" />} title="اسپلیت" value={fa(r.split.btu) + " BTU"} desc="رند شده" tone="sky" />
+                    <ResultCard icon={<Boiler className="h-5 w-5" />} title="پکیج" value={fa(r.boiler.kw) + " kW"} desc={r.boiler.undersized ? "⚠️ کافی نیست؛ موتورخانه/چند پکیج لازم است" : "رایج بازار"} tone={r.boiler.undersized ? "orange" : "teal"} />
+                    <ResultCard icon={<Cooler className="h-5 w-5" />} title="اسپلیت" value={fa(r.split.btu) + " BTU"} desc={r.split.undersized ? "⚠️ کافی نیست؛ چند دستگاه/چیلر لازم است" : "رند شده"} tone={r.split.undersized ? "orange" : "sky"} />
                     <ResultCard icon={<Radiator className="h-5 w-5" />} title="پره‌ای" value={fa(r.radiator.sections145) + "-" + fa(r.radiator.sections120) + " پره"} desc="بسته به راندمان" tone="orange" wide />
                     <ResultCard icon={<Radiator className="h-5 w-5" />} title="پنلی" value={fa(r.radiator.panelMeters) + " متر"} desc="کل خانه" tone="teal" />
                     <ResultCard icon={<Cooler className="h-5 w-5" />} title="کولر آبی" value={fa(r.evaporative.airflow) + " m³/h"} desc={r.evaporative.padLabel} tone="sky" />

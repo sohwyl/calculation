@@ -226,8 +226,11 @@ export const PACKAGE_STEPS = [22, 24, 28, 32, 36, 40]; // ظرفیت‌های ر
 
 export function packageBoiler(i: Inputs) {
   const raw = heatingKw(i) + HW_BONUS[i.hotWater];
-  const kw = PACKAGE_STEPS.find((s) => raw <= s) ?? PACKAGE_STEPS[PACKAGE_STEPS.length - 1];
-  return { rawKw: raw, kw };
+  const maxStep = PACKAGE_STEPS[PACKAGE_STEPS.length - 1];
+  const kw = PACKAGE_STEPS.find((s) => raw <= s) ?? maxStep;
+  // اگر بار محاسبه‌شده از بالاترین پکیج موجود در جدول (تک‌دستگاهی) بیشتر باشد،
+  // این پیشنهاد دیگر کافی نیست و باید موتورخانه/چند پکیج در نظر گرفته شود.
+  return { rawKw: raw, kw, undersized: raw > maxStep };
 }
 
 /* ------------------------- کولر گازی / اسپلیت ------------------------- */
@@ -289,8 +292,11 @@ export function splitCooler(i: Inputs) {
   const occAddBtu = occ * 400; // هر نفر ~۴۰۰ BTU بار برودتی
 
   const raw = base * heightFactor * windowFactor * orientFactor * usageFactor * wallFactor + occAddBtu;
-  const btu = SPLIT_STEPS.find((s) => raw <= s) ?? SPLIT_STEPS[SPLIT_STEPS.length - 1];
-  return { rawBtu: raw, btu };
+  const maxStep = SPLIT_STEPS[SPLIT_STEPS.length - 1];
+  const btu = SPLIT_STEPS.find((s) => raw <= s) ?? maxStep;
+  // اگر بار محاسبه‌شده از بالاترین اسپلیت موجود در جدول (تک‌دستگاهی) بیشتر باشد،
+  // این پیشنهاد کافی نیست و باید چند اسپلیت یا سیستم چیلر/داکت اسپلیت در نظر گرفته شود.
+  return { rawBtu: raw, btu, undersized: raw > maxStep };
 }
 
 /* ----------------------------- کولر آبی ----------------------------- */
@@ -406,7 +412,11 @@ export function costEstimate(i: Inputs) {
 
 // صرفه‌جویی انرژی با عایق (pro) — مقایسه عایق خوب با وضعیت قدیمی (مبحث ۱۹)
 export function energySavings(i: Inputs) {
-  const base = i.area * HEAT_KCAL[i.climate] * FLOOR_H[i.floor] * SUN_H[i.sun];
+  // نکته: از effectiveClimate استفاده می‌شود (نه i.climate خام) تا وقتی کاربر شهر
+  // را انتخاب کرده، این محاسبه با بقیه‌ی محاسبات (که همه از اقلیم مؤثر شهر
+  // استفاده می‌کنند) هماهنگ بماند.
+  const climate = effectiveClimate(i);
+  const base = i.area * HEAT_KCAL[climate] * FLOOR_H[i.floor] * SUN_H[i.sun];
   const asOldKw = (base * INS_H["old"]) / 860;
   const asGoodKw = (base * INS_H["good"]) / 860;
   const savingPct = Math.round(((asOldKw - asGoodKw) / asOldKw) * 100);
