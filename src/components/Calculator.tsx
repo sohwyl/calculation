@@ -292,7 +292,11 @@ export default function Calculator() {
                       onChange={(e) => setDraftArea(+e.target.value)}
                       onPointerUp={() => setArea(draftArea)}
                       onTouchEnd={() => setArea(draftArea)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') setArea(draftArea); }}
+                      onKeyUp={() => setArea(draftArea)}
+                      // نکته دسترسی‌پذیری: onKeyUp (نه فقط Enter در onKeyDown) باعث می‌شود
+                      // هر تغییر با کلیدهای جهت‌دار/Home/End/PageUp/PageDown هم بلافاصله
+                      // اعمال شود؛ چون فشردن کلید رویدادی گسسته است (برخلاف درگ ماوس که
+                      // پیوسته است)، این کار هزینه محاسباتی onPointerUp را از بین نمی‌برد.
                       className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-teal-600"
                     />
                   </label>
