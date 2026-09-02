@@ -1,0 +1,28 @@
+{
+  "name": "محاسبه‌گر تاسیسات یزد",
+  "short_name": "تاسیسات یزد",
+  "description": "محاسبه‌گر تخصصی رادیاتور، پکیج، کولر و تاسیزات ساختمان مبتنی بر مباحث نظام مهندسی ایران.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6faf9",
+  "theme_color": "#0f766e",
+  "dir": "rtl",
+  "lang": "fa",
+  "categories": ["utilities", "productivity", "business"],
+  "icons": [
+    {
+      "src": "icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
