@@ -11,6 +11,8 @@
  * محاسبات دقیق اجرایی و نرم‌افزارهای بارگذاری (HAP/Carrier/ASHRAE) برای پروژه‌های بزرگ نیستند.
  */
 
+import { PACKAGE_PRICE, SPLIT_PRICE, FALLBACK_PACKAGE_PRICE, FALLBACK_SPLIT_PRICE, RADIATOR_SECTION_PRICE, RADIATOR_PANEL_PRICE_PER_M, LAST_PRICE_UPDATE } from "./prices";
+
 export type ClimateKey = "yazd" | "mild" | "cold" | "humid";
 export type FloorKey = "middle" | "top" | "ground" | "villa";
 export type SunKey = "low" | "normal" | "high";
@@ -380,34 +382,17 @@ export function gasConsumption(i: Inputs) {
   return { gasM3: Math.round(gasM3), gasKwh: Math.round(gasKwh) };
 }
 
-// تخمیـن هزیـنه تجهیـزات (pro) — قیمت‌های تقریبی بازار ایران (تومان)
-const PACKAGE_PRICE: Record<number, number> = {
-  22: 16000000,
-  24: 17500000,
-  28: 21000000,
-  32: 26000000,
-  36: 30000000,
-  40: 34000000,
-};
-const SPLIT_PRICE: Record<number, number> = {
-  9000: 13000000,
-  12000: 16000000,
-  18000: 21000000,
-  24000: 26000000,
-  30000: 32000000,
-  36000: 38000000,
-  48000: 52000000,
-  60000: 65000000,
-};
+// تخمیـن هزیـنه تجهیـزات (pro) — قیمت‌ها اکنون در src/lib/prices.ts نگه‌داری می‌شوند
+// (آپدیت ماهانه قیمت فقط با ویرایش آن فایل انجام می‌شود، بدون دست‌زدن به این‌جا)
 export function costEstimate(i: Inputs) {
   const b = packageBoiler(i);
   const s = splitCooler(i);
   const rad = radiator(i);
-  const boiler = PACKAGE_PRICE[b.kw] ?? 18000000;
-  const split = SPLIT_PRICE[s.btu] ?? 20000000;
-  const radiatorCost = Math.round(rad.sections145 * 70000 + rad.panelMeters * 1200000);
+  const boiler = PACKAGE_PRICE[b.kw] ?? FALLBACK_PACKAGE_PRICE;
+  const split = SPLIT_PRICE[s.btu] ?? FALLBACK_SPLIT_PRICE;
+  const radiatorCost = Math.round(rad.sections145 * RADIATOR_SECTION_PRICE + rad.panelMeters * RADIATOR_PANEL_PRICE_PER_M);
   const total = boiler + split + radiatorCost;
-  return { boiler, split, radiator: radiatorCost, total };
+  return { boiler, split, radiator: radiatorCost, total, priceLastUpdate: LAST_PRICE_UPDATE };
 }
 
 // صرفه‌جویی انرژی با عایق (pro) — مقایسه عایق خوب با وضعیت قدیمی (مبحث ۱۹)
