@@ -111,19 +111,20 @@ export function redeemCode(code: string): { ok: boolean; msg: string } {
 // ── طرح جدید (production): شماره موبایل + کد ۵ رقمی، اعتبارسنجی سمت سرور ──
 
 // کلید عمومی ECDSA (P-256) — فقط برای تایید امضای توکن صادرشده توسط سرور.
-// افشای این کلید مشکلی ندارد؛ کلید خصوصی متناظرش فقط در Supabase Edge
-// Function (متغیر محیطی LICENSE_PRIVATE_JWK) نگه‌داری می‌شود.
+// افشای این کلید مشکلی ندارد؛ کلید خصوصی متناظرش فقط روی هاست شما، در
+// php-backend/keys/private.pem نگه‌داری می‌شود (هرگز commit نمی‌شود).
+// ⚠️ این کلید با اسکریپت scripts/generate-keypair.php ساخته شده. اگر روی
+// هاست خودتان دوباره کلید بسازید، این مقدار را هم باید با خروجی جدید عوض کنید.
 const PUBLIC_KEY_JWK: JsonWebKey = {
   key_ops: ["verify"], ext: true, kty: "EC", crv: "P-256",
-  x: "Vbn-LeMhdDiQDJ3eZJW0St-WAlvXa9AHLFNEr4KTUp8",
-  y: "d9g0TW1algPR-1lO6S-Z4uVMx0G8cHN4qbddu7MQUR4",
+  x: "ji8AIffh20t77jtZxqsatZvzPGsu2FdfJa0tsUJJJWw",
+  y: "LH0FvLTY0CZPR3f-ejBHNdIV_wxWbHugy6p7nIy1eiY",
 };
 
-// آدرس Edge Function ها — بعد از دیپلوی روی Supabase، این‌ها را در فایل .env
-// (بر اساس .env.example) پر کنید. تا وقتی خالی‌اند، ورود با شماره+کد کار
-// نمی‌کند و پیام مناسب نمایش داده می‌شود.
-const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ?? "";
-const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+// آدرس پوشه‌ی php-backend روی هاست شما — در فایل .env (بر اساس .env.example)
+// پر کنید، مثلاً: VITE_API_BASE=https://your-domain.example/php-backend
+// تا وقتی خالی است، خرید/ورود کار نمی‌کند و پیام مناسب نمایش داده می‌شود.
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 let cachedRemotePro = false;
 
@@ -159,15 +160,34 @@ if (typeof window !== "undefined") {
   void initRemoteVerification();
 }
 
-/** ورود با شماره موبایل + کد لایسنس (بدون نیاز به پیامک) از طریق سرور */
-export async function remoteLogin(phone: string, code: string): Promise<{ ok: boolean; msg: string }> {
-  if (!FUNCTIONS_BASE) {
-    return { ok: false, msg: "سرویس ورود هنوز روی سایت تنظیم نشده است (VITE_SUPABASE_FUNCTIONS_URL خالی است)." };
+/** ثبت سفارش (نام + شماره موبایل) و دریافت لینک پرداخت زرین‌پال */
+export async function startOrder(phone: string, fullName: string): Promise<{ ok: boolean; msg: string; redirectUrl?: string }> {
+  if (!API_BASE) {
+    return { ok: false, msg: "درگاه پرداخت هنوز روی سایت تنظیم نشده است (VITE_API_BASE خالی است)." };
   }
   try {
-    const res = await fetch(`${FUNCTIONS_BASE}/license-login`, {
+    const res = await fetch(`${API_BASE}/start-order.php`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` },
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, fullName }),
+    });
+    const data = await res.json();
+    if (!data.ok) return { ok: false, msg: data.msg ?? "ثبت سفارش ناموفق بود." };
+    return { ok: true, msg: "در حال انتقال به درگاه پرداخت…", redirectUrl: data.redirectUrl };
+  } catch {
+    return { ok: false, msg: "خطا در اتصال به سرور. اتصال اینترنت را بررسی کنید." };
+  }
+}
+
+/** ورود با شماره موبایل + کد لایسنس (بدون نیاز به پیامک) از طریق سرور */
+export async function remoteLogin(phone: string, code: string): Promise<{ ok: boolean; msg: string }> {
+  if (!API_BASE) {
+    return { ok: false, msg: "سرویس ورود هنوز روی سایت تنظیم نشده است (VITE_API_BASE خالی است)." };
+  }
+  try {
+    const res = await fetch(`${API_BASE}/license-login.php`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, code }),
     });
     const data = await res.json();

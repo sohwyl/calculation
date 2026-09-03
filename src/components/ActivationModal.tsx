@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
 import { useIsPro, onActivationRequest } from "../hooks/useLicense";
-import { activate, clearLicense, redeemCode, remoteLogin } from "../lib/license";
+import { activate, clearLicense, redeemCode, remoteLogin, startOrder } from "../lib/license";
 import { Bolt, Shield, Check, Sparkle } from "./Icons";
-
-/* ════════════════════════════════════════════════════════════════
- *  🔗 لینک درگاه پرداخت اختصاصی
- *  این مقدار را با آدرس درگاه واقعی خود جایگزین کنید.
- *  مثال: "https://your-gateway.ir/pay?amount=49000"
- *  تا زمانی که خالی باشد، برای پیش‌نمایش، روند پرداخت موفق شبیه‌سازی می‌شود.
- * ════════════════════════════════════════════════════════════════ */
-const GATEWAY_URL = "";
 
 type Stage = "choose" | "gateway" | "success" | "failed";
 
@@ -19,6 +11,13 @@ const PERKS = [
   "فاکتور و گزارش کامل PDF",
   "بروزرسانی‌های آینده رایگان",
 ];
+
+/** نمایش شماره به‌صورت گروه‌بندی‌شده (0912 345 6789) تا کاربر راحت‌تر چک کند درست تایپ کرده */
+function formatPhoneDisplay(p: string): string {
+  const d = p.replace(/\D/g, "").slice(0, 11);
+  const parts = [d.slice(0, 4), d.slice(4, 7), d.slice(7, 11)].filter(Boolean);
+  return parts.join(" ");
+}
 
 export default function ActivationModal() {
   const [open, setOpen] = useState(false);
@@ -30,37 +29,40 @@ export default function ActivationModal() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // فرم خرید (قبل از پرداخت)
+  const [fullName, setFullName] = useState("");
+  const [buyPhone, setBuyPhone] = useState("");
+  const [buyPhoneConfirm, setBuyPhoneConfirm] = useState("");
+  const [buyError, setBuyError] = useState("");
+  const [starting, setStarting] = useState(false);
+
   // باز شدن با رویداد درخواست فعال‌سازی
   useEffect(() => onActivationRequest(() => { setStage("choose"); setOpen(true); }), []);
 
-  // بازگشت از درگاه واقعی با پارامتر ?pay=ok|fail
-  // TODO (در انتظار انتخاب درگاه پرداخت — طبق برنامه، آخر کار تکمیل می‌شود):
-  // با معماری جدید (شماره موبایل + کد ۵ رقمی)، روند صحیح این است که بعد از
-  // بازگشت از درگاه، اکشن "verify" تابع create-license صدا زده شود (نه
-  // redeemCode قدیمی)، کد ۵ رقمی از پاسخ گرفته و مستقیم به کاربر نمایش داده
-  // شود (چون طبق تصمیم پروژه، پیامک ارسال نمی‌کنیم). فعلاً این بخش placeholder
-  // است و redeemCode قدیمی را صدا می‌زند که فقط در DEV کار می‌کند.
+  // بازگشت از درگاه واقعی با پارامتر ?pay=ok&phone=...&code=... (یا ?pay=fail)
+  // این پارامترها را verify-payment.php بعد از تایید واقعی پرداخت نزد زرین‌پال
+  // می‌سازد. اینجا فقط با همان مسیر امن remoteLogin (که rate-limit و امضای
+  // دیجیتال دارد) وارد می‌شویم — هیچ اعتماد کورکورانه‌ای به خودِ پارامترهای
+  // URL نیست، چون remoteLogin واقعاً کد را نزد سرور بررسی می‌کند.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pay = params.get("pay");
+    const returnedPhone = params.get("phone");
     const returnedCode = params.get("code");
-    if (pay === "ok") {
-      if (returnedCode) {
-        const res = redeemCode(returnedCode);
+    if (pay === "ok" && returnedPhone && returnedCode) {
+      setOpen(true);
+      setStage("gateway");
+      remoteLogin(returnedPhone, returnedCode).then((res) => {
+        setMsg({ ok: res.ok, text: res.msg });
         setStage(res.ok ? "success" : "failed");
-        setOpen(true);
-      } else if (import.meta.env.DEV) {
-        // فقط در محیط توسعه، برای تست بدون درگاه واقعی، فعال‌سازی مستقیم مجاز است.
-        activate();
-        setStage("success");
-        setOpen(true);
-      } else {
-        // در نسخه‌ی نهایی، بدون کد معتبر از درگاه، فعال‌سازی انجام نمی‌شود.
-        setStage("failed");
-        setOpen(true);
-      }
+      });
+      // پاکسازی URL تا با رفرش صفحه دوباره اجرا نشود
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (pay === "fail") {
+      setStage("failed");
+      setOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
     }
-    if (pay === "fail") { setStage("failed"); setOpen(true); }
   }, []);
 
   if (!open) return null;
@@ -80,23 +82,35 @@ export default function ActivationModal() {
     if (res.ok) setTimeout(() => { setStage("success"); }, 300);
   }
 
-  function handlePay() {
+  async function handleStartOrder() {
+    setBuyError("");
+    const cleanPhone = buyPhone.replace(/\D/g, "");
+    const cleanConfirm = buyPhoneConfirm.replace(/\D/g, "");
+
+    if (fullName.trim().length < 2) return setBuyError("نام و نام خانوادگی را کامل وارد کنید.");
+    if (!/^09\d{9}$/.test(cleanPhone)) return setBuyError("شماره موبایل معتبر نیست (باید مثلاً 09123456789 باشد).");
+    if (cleanPhone !== cleanConfirm) return setBuyError("دو شماره‌ای که وارد کردید یکسان نیستند — لطفاً دوباره چک کنید.");
+
+    setStarting(true);
     setStage("gateway");
-    if (GATEWAY_URL) {
-      // هدایت واقعی به درگاه اختصاصی
-      setTimeout(() => { window.location.href = GATEWAY_URL; }, 1600);
+    const res = await startOrder(cleanPhone, fullName.trim());
+    setStarting(false);
+
+    if (res.ok && res.redirectUrl) {
+      window.location.href = res.redirectUrl; // هدایت به صفحه پرداخت زرین‌پال
       return;
     }
-    if (import.meta.env.DEV) {
-      // شبیه‌سازی بازگشت موفق از درگاه — فقط برای پیش‌نمایش در محیط توسعه.
-      setTimeout(() => { activate(); setStage("success"); }, 2200);
+
+    if (!res.ok && import.meta.env.DEV) {
+      // فقط در محیط توسعه (وقتی هنوز VITE_API_BASE تنظیم نشده)، برای پیش‌نمایش
+      // رابط کاربری، فعال‌سازی مستقیم شبیه‌سازی می‌شود.
+      activate();
+      setStage("success");
       return;
     }
-    // نکته امنیتی: در نسخه‌ی نهایی (production build) اگر GATEWAY_URL تنظیم نشده
-    // باشد، دیگر Pro به‌صورت رایگان فعال نمی‌شود — وگرنه هر کاربری بدون پرداخت
-    // به نسخه‌ی تخصصی دسترسی پیدا می‌کند. باید پیش از انتشار، GATEWAY_URL را
-    // با آدرس درگاه پرداخت واقعی پر کنید.
-    setTimeout(() => { setStage("failed"); }, 800);
+
+    setBuyError(res.msg);
+    setStage("choose");
   }
 
   return (
@@ -194,10 +208,41 @@ export default function ActivationModal() {
                 </div>
               ) : (
                 <>
-                  {/* خرید */}
-                  <button onClick={handlePay} className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-l from-teal-600 to-sky-500 p-4 text-right text-white shadow-lg shadow-teal-500/30 transition hover:-translate-y-0.5">
+                  {/* فرم خرید: نام + شماره (با تکرار، برای پیشگیری از اشتباه تایپی چون پیامک OTP نداریم) */}
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
+                    <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="نام و نام خانوادگی" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500" />
+                    <input value={buyPhone} onChange={(e) => setBuyPhone(e.target.value)} placeholder="شماره موبایل" dir="ltr" inputMode="numeric" maxLength={11} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold tracking-widest text-slate-800 outline-none transition focus:border-teal-500" />
+                    <input value={buyPhoneConfirm} onChange={(e) => setBuyPhoneConfirm(e.target.value)} placeholder="تکرار شماره موبایل" dir="ltr" inputMode="numeric" maxLength={11} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold tracking-widest text-slate-800 outline-none transition focus:border-teal-500" />
+
+                    {/* هشدار/تاییدیه‌ی زنده: چون پیامک تاییدیه نمی‌فرستیم، کاربر باید خودش
+                        مطمئن شود شماره را درست تایپ کرده — این پیام هر بار که تایپ می‌کند آپدیت می‌شود. */}
+                    {buyPhone.replace(/\D/g, "").length > 0 && (
+                      /^09\d{9}$/.test(buyPhone.replace(/\D/g, "")) ? (
+                        buyPhoneConfirm.replace(/\D/g, "").length === 0 ? (
+                          <p className="rounded-lg bg-sky-50 px-3 py-2 text-center text-[11px] font-bold text-sky-700">
+                            شماره‌ی وارد شده: {formatPhoneDisplay(buyPhone)} — لطفاً دوباره در کادر پایین تکرار کنید تا مطمئن شویم درست است.
+                          </p>
+                        ) : buyPhone.replace(/\D/g, "") === buyPhoneConfirm.replace(/\D/g, "") ? (
+                          <p className="rounded-lg bg-teal-50 px-3 py-2 text-center text-[11px] font-bold text-teal-700">
+                            ✓ شماره تایید شد: {formatPhoneDisplay(buyPhone)} — چون پیامکی ارسال نمی‌کنیم، کد لایسنس فقط با همین شماره قابل بازیابی است.
+                          </p>
+                        ) : (
+                          <p className="rounded-lg bg-red-50 px-3 py-2 text-center text-[11px] font-bold text-red-600">
+                            دو شماره یکسان نیستند — لطفاً دوباره چک کنید.
+                          </p>
+                        )
+                      ) : (
+                        <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-[11px] font-bold text-amber-700">
+                          شماره باید ۱۱ رقم و با 09 شروع شود.
+                        </p>
+                      )
+                    )}
+                    {buyError && <p className="rounded-lg bg-red-50 px-3 py-2 text-center text-[11px] font-bold text-red-600">{buyError}</p>}
+                  </div>
+
+                  <button onClick={handleStartOrder} disabled={starting} className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-l from-teal-600 to-sky-500 p-4 text-right text-white shadow-lg shadow-teal-500/30 transition hover:-translate-y-0.5 disabled:opacity-60">
                     <span>
-                      <span className="block text-sm font-extrabold">پرداخت امن و شفاف</span>
+                      <span className="block text-sm font-extrabold">{starting ? "در حال ثبت سفارش…" : "پرداخت امن و شفاف"}</span>
                       <span className="block text-[11px] text-teal-100">۴۹٬۰۰۰ تومان — فعال‌سازی آنی و همیشگی</span>
                     </span>
                     <span className="shrink-0 text-left">

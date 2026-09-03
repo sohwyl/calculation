@@ -3,3 +3,8 @@ dist/
 *.log
 .DS_Store
 .env
+
+# بک‌اند PHP — فایل‌های محرمانه/محلی هرگز commit نشوند
+php-backend/config.php
+php-backend/keys/*.pem
+php-backend/data/*.sqlite*

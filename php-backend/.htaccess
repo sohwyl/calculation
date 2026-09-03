@@ -1,0 +1,16 @@
+# جلوگیری از دانلود/مشاهده‌ی مستقیم فایل‌های حساس از طریق مرورگر.
+# (روی هاست‌های Apache/cPanel معمولاً همین کافی است. اگر هاست شما Nginx است،
+#  باید معادل این قوانین را در تنظیمات Nginx یا پنل هاست اضافه کنید.)
+
+<FilesMatch "\.(sqlite|sqlite-wal|sqlite-shm|pem|php-example)$">
+    Require all denied
+</FilesMatch>
+
+<Files "config.php">
+    Require all denied
+</Files>
+
+# پوشه‌های داده و کلید کلاً از دسترسی مستقیم وب خارج باشند
+RewriteEngine On
+RewriteRule ^data/ - [F,L]
+RewriteRule ^keys/ - [F,L]
