@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useIsPro, onActivationRequest } from "../hooks/useLicense";
-import { activate, clearLicense, redeemCode } from "../lib/license";
+import { activate, clearLicense, redeemCode, remoteLogin } from "../lib/license";
 import { Bolt, Shield, Check, Sparkle } from "./Icons";
 
 /* ════════════════════════════════════════════════════════════════
@@ -25,16 +25,21 @@ export default function ActivationModal() {
   const [stage, setStage] = useState<Stage>("choose");
   const isPro = useIsPro();
   const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loginCode, setLoginCode] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // باز شدن با رویداد درخواست فعال‌سازی
   useEffect(() => onActivationRequest(() => { setStage("choose"); setOpen(true); }), []);
 
   // بازگشت از درگاه واقعی با پارامتر ?pay=ok|fail
-  // نکته امنیتی: هرگز فقط به pay=ok اعتماد نکنید — این پارامتر را هرکسی می‌تواند
-  // دستی به URL اضافه کند و بدون پرداخت، نسخه‌ی Pro را فعال کند. درگاه واقعی باید
-  // همراه با pay=ok یک کد امضاشده (همان فرمت TYZ-<exp>-<sig>) در پارامتر code
-  // برگرداند تا از طریق redeemCode بررسی شود.
+  // TODO (در انتظار انتخاب درگاه پرداخت — طبق برنامه، آخر کار تکمیل می‌شود):
+  // با معماری جدید (شماره موبایل + کد ۵ رقمی)، روند صحیح این است که بعد از
+  // بازگشت از درگاه، اکشن "verify" تابع create-license صدا زده شود (نه
+  // redeemCode قدیمی)، کد ۵ رقمی از پاسخ گرفته و مستقیم به کاربر نمایش داده
+  // شود (چون طبق تصمیم پروژه، پیامک ارسال نمی‌کنیم). فعلاً این بخش placeholder
+  // است و redeemCode قدیمی را صدا می‌زند که فقط در DEV کار می‌کند.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pay = params.get("pay");
@@ -64,6 +69,15 @@ export default function ActivationModal() {
     const res = redeemCode(code);
     setMsg({ ok: res.ok, text: res.msg });
     if (res.ok) { activate(); setTimeout(() => { setStage("success"); }, 300); }
+  }
+
+  async function handleRemoteLogin() {
+    setLoggingIn(true);
+    setMsg(null);
+    const res = await remoteLogin(phone.trim(), loginCode.trim());
+    setLoggingIn(false);
+    setMsg({ ok: res.ok, text: res.msg });
+    if (res.ok) setTimeout(() => { setStage("success"); }, 300);
   }
 
   function handlePay() {
@@ -193,18 +207,30 @@ export default function ActivationModal() {
                   </button>
 
                   <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                    <span className="h-px flex-1 bg-slate-200" /> یا کد فعال‌سازی دارید <span className="h-px flex-1 bg-slate-200" />
+                    <span className="h-px flex-1 bg-slate-200" /> قبلاً خرید کرده‌اید؟ وارد شوید <span className="h-px flex-1 bg-slate-200" />
                   </div>
 
-                  <div>
-                    <input value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRedeem()} placeholder="مثلاً TYZ-PRO-1404" dir="ltr" className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-sm font-bold tracking-widest text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white" />
-                    <button onClick={handleRedeem} className="mt-3 w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-700">
-                      <Sparkle className="mr-1 inline h-4 w-4" /> فعال‌سازی با کد
+                  <div className="space-y-2">
+                    <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="شماره موبایل (مثلاً 09123456789)" dir="ltr" inputMode="numeric" className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-sm font-bold tracking-widest text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white" />
+                    <input value={loginCode} onChange={(e) => setLoginCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRemoteLogin()} placeholder="کد لایسنس (۵ رقم)" dir="ltr" inputMode="numeric" maxLength={5} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-sm font-bold tracking-[0.3em] text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white" />
+                    <button onClick={handleRemoteLogin} disabled={loggingIn} className="mt-1 w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-700 disabled:opacity-60">
+                      <Sparkle className="mr-1 inline h-4 w-4" /> {loggingIn ? "در حال بررسی…" : "ورود"}
                     </button>
                     {msg && (
                       <p className={"mt-2 rounded-lg px-3 py-2 text-center text-xs font-semibold " + (msg.ok ? "bg-teal-50 text-teal-700" : "bg-red-50 text-red-600")}>{msg.text}</p>
                     )}
                   </div>
+
+                  {/* فرم قدیمی کد تکی — فقط برای تست محلی بدون نیاز به سرور، در نسخه نهایی رندر نمی‌شود */}
+                  {import.meta.env.DEV && (
+                    <div className="space-y-2 rounded-xl border border-dashed border-slate-300 p-3">
+                      <p className="text-center text-[10px] font-bold text-slate-400">(فقط DEV) کد تکی قدیمی برای تست سریع</p>
+                      <input value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRedeem()} placeholder="مثلاً TYZ-PRO-1404" dir="ltr" className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center text-sm font-bold tracking-widest text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white" />
+                      <button onClick={handleRedeem} className="w-full rounded-xl bg-slate-700 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                        فعال‌سازی با کد قدیمی (dev)
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-[11px] leading-5 text-amber-700">
                     <Bolt className="mt-0.5 h-4 w-4 shrink-0" />
